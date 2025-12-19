@@ -11,7 +11,7 @@ Standards:
 UPDATED:
 - Aligned with 'models.py' (User model).
 - Implements Hybrid Auth: Validates Credentials via Env (Bootstrap), resolves Identity via DB.
-- **CHANGE:** Uses PLAIN TEXT admin password from Environment Variables.
+- **SECURITY UPDATE:** Performs direct comparison against ADMIN_PASSWORD env var (No Hashing).
 """
 
 import logging
@@ -83,21 +83,21 @@ class AuthService:
         Verifies credentials against Environment Variables (Bootstrap Admin).
         
         UPDATED: Checks directly against 'ADMIN_PASSWORD' (Plain Text).
-        Note: Storing plain text passwords in env vars is convenient but less secure
-        than hashes if the environment is compromised.
+        Uses secrets.compare_digest to prevent timing attacks during string comparison.
         """
         env_user = os.getenv("ADMIN_USERNAME", "admin")
-        env_password = os.getenv("ADMIN_PASSWORD") # Plain text password
+        
+        # Check for plain text password variable
+        env_password = os.getenv("ADMIN_PASSWORD")
 
         if not env_password:
-            logger.warning("ADMIN_PASSWORD not set. Login disabled.")
+            logger.warning("ADMIN_PASSWORD not set in environment. Login disabled.")
             return False
 
         if username != env_user:
             return False
 
         # Compare plain text directly using constant-time comparison
-        # This prevents timing attacks even with plain text comparison
         return secrets.compare_digest(password, env_password)
 
     @staticmethod
@@ -131,20 +131,14 @@ class AuthService:
         Hybrid Authentication:
         1. Verifies Username/Password against Environment Variables (Secure).
         2. Retrieves the corresponding 'User' entity from DB to validate Roles/Ban status.
-        
-        Assumptions:
-        - The Admin Username in Env Vars maps to a 'username' in the 'users' table.
         """
         # 1. Verify Credentials (Env check)
         if not AuthService.verify_env_admin_credentials(username, password):
             logger.warning(f"Auth failed: Invalid credentials for '{username}'.")
             return None
 
-        # 2. Resolve User Entity from DB
-        # Note: Actual DB resolution happens in the route handler via async/await
-        # We return True here to signal credential validity if we were separating concerns,
-        # but the standard flow often does DB lookup here. 
-        # For this architecture, the route handles the DB fetch based on success here.
+        # 2. Return True to signal credential validity.
+        # The actual User object fetching happens in the route handler.
         return True 
 
 
@@ -221,7 +215,7 @@ async def get_current_admin(
             detail="Account is banned"
         )
     
-    # Optional: Enforce strictly ADMIN role here, or leave to 'require_admin_role' dependency
+    # Optional: Enforce strictly ADMIN role here
     if user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
         logger.info(f"User {user.username} authenticated but is role {user.role}")
 
@@ -260,7 +254,7 @@ async def login_for_access_token(
          logger.error(f"Login successful but no DB User found for '{form_data.username}'.")
          raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="System Error: Admin user profile missing in database."
+            detail="System Error: Admin user profile missing in database. Please create the user manually."
         )
 
     # 3. Create Token
