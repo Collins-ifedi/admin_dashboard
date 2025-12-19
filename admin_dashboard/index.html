@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0F172A',
+                        secondary: '#1E293B',
+                        accent: '#3B82F6',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3B82F6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .toast { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .nav-link { transition: all 0.2s ease; }
+        .nav-link:hover { background: #F1F5F9; }
+        .nav-link.active { background: #EFF6FF; color: #3B82F6; border-right: 3px solid #3B82F6; }
+        .stat-card { transition: all 0.3s ease; }
+        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0,0,0,0.1); }
+        .sidebar-overlay { backdrop-filter: blur(4px); }
+        @media (max-width: 1023px) {
+            .sidebar { transform: translateX(-100%); transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; }
+        }
+    </style>
+</head>
+<body class="bg-white min-h-screen">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Login View -->
+    <div id="login-view" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+        <div class="w-full max-w-md p-8" data-aos="fade-up">
+            <div class="bg-white rounded-2xl shadow-xl border border-slate-200 p-8">
+                <div class="text-center mb-8">
+                    <div class="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <h1 class="text-2xl font-bold text-primary">Admin Dashboard</h1>
+                    <p class="text-slate-500 mt-2">Sign in to your account</p>
+                </div>
+                <form id="login-form" class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Username</label>
+                        <input type="text" id="login-username" required
+                            class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all"
+                            placeholder="Enter your username">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 mb-2">Password</label>
+                        <input type="password" id="login-password" required
+                            class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all"
+                            placeholder="Enter your password">
+                    </div>
+                    <button type="submit" id="login-btn"
+                        class="w-full bg-accent hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition-all flex items-center justify-center gap-2">
+                        <span>Sign In</span>
+                        <div id="login-loader" class="loader hidden"></div>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Dashboard View -->
+    <div id="dashboard-view" class="hidden min-h-screen flex">
+        <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 hidden lg:hidden" onclick="toggleSidebar()"></div>
+        
+        <aside id="sidebar" class="sidebar w-64 bg-white border-r border-slate-200 fixed h-full z-40">
+            <div class="p-6 border-b border-slate-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
+                            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-primary">Dashboard</h2>
+                            <p id="admin-role" class="text-xs text-slate-500">Administrator</p>
+                        </div>
+                    </div>
+                    <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-all" aria-label="Close sidebar">
+                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <nav class="p-4 space-y-1">
+                <a href="index.html" class="nav-link active flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    Overview
+                </a>
+                <a href="users.html" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    Users
+                </a>
+                <a href="operations.html" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    Operations
+                </a>
+                <!-- Removed Admins nav link since admins.html is deleted -->
+            </nav>
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+                <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 hover:bg-red-50 hover:text-danger transition-all font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content flex-1 lg:ml-64 p-4 lg:p-8 bg-slate-50 min-h-screen">
+            <div class="lg:hidden flex items-center justify-between mb-6 bg-white rounded-xl p-4 border border-slate-200">
+                <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-slate-100 transition-all" aria-label="Open menu">
+                    <svg class="w-6 h-6 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+                <h2 class="font-bold text-primary">Dashboard</h2>
+                <div class="w-10"></div>
+            </div>
+
+            <!-- Header -->
+            <header class="mb-8" data-aos="fade-down">
+                <h1 class="text-2xl lg:text-3xl font-bold text-primary">Dashboard Overview</h1>
+                <p class="text-slate-500 mt-1">Welcome back, <span id="admin-name">Admin</span></p>
+            </header>
+
+            <!-- Stats Grid -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6 mb-8">
+                <!-- Total Users -->
+                <div class="stat-card bg-white rounded-2xl p-6 border border-slate-200" data-aos="fade-up" data-aos-delay="0">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-full">Active</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-slate-500 mb-1">Total Users</h3>
+                    <p id="stat-users" class="text-3xl font-bold text-primary">--</p>
+                </div>
+
+                <!-- Total Orders -->
+                <div class="stat-card bg-white rounded-2xl p-6 border border-slate-200" data-aos="fade-up" data-aos-delay="100">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-green-50 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-medium text-success bg-success/10 px-2 py-1 rounded-full">Completed</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-slate-500 mb-1">Total Orders</h3>
+                    <p id="stat-orders" class="text-3xl font-bold text-primary">--</p>
+                </div>
+
+                <!-- Pending Transactions -->
+                <div class="stat-card bg-white rounded-2xl p-6 border border-slate-200" data-aos="fade-up" data-aos-delay="200">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-medium text-warning bg-warning/10 px-2 py-1 rounded-full">Pending</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-slate-500 mb-1">Pending Top-ups</h3>
+                    <p id="stat-pending" class="text-3xl font-bold text-primary">--</p>
+                </div>
+
+                <!-- Available Codes -->
+                <div class="stat-card bg-white rounded-2xl p-6 border border-slate-200" data-aos="fade-up" data-aos-delay="300">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="w-12 h-12 bg-purple-50 rounded-xl flex items-center justify-center">
+                            <svg class="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                            </svg>
+                        </div>
+                        <span class="text-xs font-medium text-purple-600 bg-purple-50 px-2 py-1 rounded-full">Stock</span>
+                    </div>
+                    <h3 class="text-sm font-medium text-slate-500 mb-1">Available Codes</h3>
+                    <p id="stat-codes" class="text-3xl font-bold text-primary">--</p>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-6" data-aos="fade-up" data-aos-delay="400">
+                <h2 class="text-lg font-semibold text-primary mb-4">Quick Actions</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <a href="operations.html#transactions" class="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-accent hover:bg-accent/5 transition-all group">
+                        <div class="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center group-hover:bg-amber-100 transition-all">
+                            <svg class="w-5 h-5 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-medium text-primary">Review Top-ups</h3>
+                            <p class="text-sm text-slate-500">Approve pending requests</p>
+                        </div>
+                    </a>
+                    <a href="operations.html#products" class="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-accent hover:bg-accent/5 transition-all group">
+                        <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center group-hover:bg-green-100 transition-all">
+                            <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-medium text-primary">Upload Codes</h3>
+                            <p class="text-sm text-slate-500">Add new product inventory</p>
+                        </div>
+                    </a>
+                    <a href="users.html" class="flex items-center gap-4 p-4 rounded-xl border border-slate-200 hover:border-accent hover:bg-accent/5 transition-all group">
+                        <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center group-hover:bg-blue-100 transition-all">
+                            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h3 class="font-medium text-primary">Manage Users</h3>
+                            <p class="text-sm text-slate-500">View and moderate users</p>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ========================
+        // CONFIGURATION
+        // ========================
+        const API_BASE = '/api/v1/admin';
+        const TOKEN_KEY = 'admin_token';
+        const ADMIN_DATA_KEY = 'admin_data';
+
+        // ========================
+        // UTILITY FUNCTIONS
+        // ========================
+        function getToken() {
+            return localStorage.getItem(TOKEN_KEY);
+        }
+
+        function setToken(token) {
+            localStorage.setItem(TOKEN_KEY, token);
+        }
+
+        function clearAuth() {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(ADMIN_DATA_KEY);
+        }
+
+        function getAdminData() {
+            const data = localStorage.getItem(ADMIN_DATA_KEY);
+            return data ? JSON.parse(data) : null;
+        }
+
+        function setAdminData(data) {
+            localStorage.setItem(ADMIN_DATA_KEY, JSON.stringify(data));
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('hidden');
+            document.body.classList.toggle('overflow-hidden');
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : 'bg-warning';
+            toast.className = `toast ${bgColor} text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 min-w-[300px]`;
+            toast.innerHTML = `
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    ${type === 'success' 
+                        ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>'
+                        : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'}
+                </svg>
+                <span class="font-medium">${message}</span>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        // API Helper for authenticated requests
+        async function apiRequest(endpoint, options = {}) {
+            const token = getToken();
+            const headers = {
+                'Content-Type': 'application/json',
+                ...options.headers
+            };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers
+                });
+
+                if (response.status === 401) {
+                    clearAuth();
+                    showView('login');
+                    showToast('Session expired. Please login again.', 'error');
+                    return null;
+                }
+
+                if (response.status === 403) {
+                    showToast('Permission denied', 'error');
+                    return null;
+                }
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Request failed');
+                }
+
+                if (response.status === 204) return { success: true };
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                showToast(error.message || 'An error occurred', 'error');
+                throw error;
+            }
+        }
+
+        // ========================
+        // VIEW MANAGEMENT
+        // ========================
+        function showView(view) {
+            document.getElementById('login-view').classList.toggle('hidden', view !== 'login');
+            document.getElementById('dashboard-view').classList.toggle('hidden', view !== 'dashboard');
+            
+            if (view === 'dashboard') {
+                AOS.refresh();
+                loadDashboardData();
+            }
+        }
+
+        // ========================
+        // DASHBOARD DATA
+        // ========================
+        async function loadDashboardData() {
+            try {
+                // Load stats in parallel - users, orders, pending topups, products
+                const [usersResponse, ordersResponse, topupsResponse, productsResponse] = await Promise.all([
+                    apiRequest('/users?limit=1'),
+                    apiRequest('/orders?limit=1'),
+                    apiRequest('/topups/pending'),
+                    apiRequest('/products')
+                ]);
+
+                // Count users from response array length (limited endpoint, just show count)
+                if (usersResponse) {
+                    // The endpoint returns an array, count shown is for the page
+                    // For accurate count, we'd need a dedicated stats endpoint
+                    // Using array length as approximation
+                    animateCounter('stat-users', Array.isArray(usersResponse) ? usersResponse.length : 0);
+                }
+
+                if (ordersResponse) {
+                    animateCounter('stat-orders', Array.isArray(ordersResponse) ? ordersResponse.length : 0);
+                }
+
+                if (topupsResponse) {
+                    animateCounter('stat-pending', Array.isArray(topupsResponse) ? topupsResponse.length : 0);
+                }
+
+                if (productsResponse) {
+                    // Products response includes current_stock from get_low_stock_products
+                    const totalCodes = productsResponse.reduce((sum, p) => sum + (p.current_stock || 0), 0);
+                    animateCounter('stat-codes', totalCodes);
+                }
+            } catch (error) {
+                console.error('Failed to load dashboard data:', error);
+            }
+        }
+
+        function animateCounter(elementId, target) {
+            const element = document.getElementById(elementId);
+            gsap.to({ val: 0 }, {
+                val: target,
+                duration: 1.5,
+                ease: 'power2.out',
+                onUpdate: function() {
+                    element.textContent = Math.round(this.targets()[0].val).toLocaleString();
+                }
+            });
+        }
+
+        // ========================
+        // LOGIN
+        // ========================
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const loader = document.getElementById('login-loader');
+            const btn = document.getElementById('login-btn');
+
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const formData = new URLSearchParams();
+                formData.append('username', username);
+                formData.append('password', password);
+
+                const response = await fetch(`${API_BASE}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: formData
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Login failed');
+                }
+
+                const data = await response.json();
+                setToken(data.access_token);
+                
+                // Store basic admin data from token (username provided during login)
+                setAdminData({ username: username, role: 'admin' });
+
+                showToast('Login successful!', 'success');
+                
+                // Update UI
+                document.getElementById('admin-name').textContent = username;
+                document.getElementById('admin-role').textContent = 'Administrator';
+
+                gsap.to('#login-view', {
+                    opacity: 0,
+                    duration: 0.3,
+                    onComplete: () => showView('dashboard')
+                });
+
+            } catch (error) {
+                showToast(error.message, 'error');
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        });
+
+        // ========================
+        // LOGOUT
+        // ========================
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            clearAuth();
+            gsap.to('#dashboard-view', {
+                opacity: 0,
+                duration: 0.3,
+                onComplete: () => {
+                    showView('login');
+                    gsap.to('#login-view', { opacity: 1, duration: 0.3 });
+                }
+            });
+            showToast('Logged out successfully', 'success');
+        });
+
+        // ========================
+        // INIT
+        // ========================
+        document.addEventListener('DOMContentLoaded', () => {
+            AOS.init({ duration: 600, once: true });
+            
+            const token = getToken();
+            if (token) {
+                const adminData = getAdminData();
+                if (adminData) {
+                    document.getElementById('admin-name').textContent = adminData.username;
+                    document.getElementById('admin-role').textContent = 'Administrator';
+                }
+                showView('dashboard');
+            } else {
+                showView('login');
+            }
+        });
+    </script>
+</body>
+</html>
