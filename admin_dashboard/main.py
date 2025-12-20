@@ -127,7 +127,7 @@ async def read_root():
 async def serve_pages(page_name: str):
     """Dynamically serves page.html (e.g., /users -> users.html)."""
     safe_name = os.path.basename(page_name)
-    file_path = f"{safe_name}.html"
+    file_path = f"{safe_name}"
 
     if os.path.exists(file_path) and os.path.isfile(file_path):
         return FileResponse(file_path)
