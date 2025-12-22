@@ -1,0 +1,1228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Operations - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <link href="https://unpkg.com/aos@2.3.1/dist/aos.css" rel="stylesheet">
+    <script src="https://unpkg.com/aos@2.3.1/dist/aos.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0F172A',
+                        secondary: '#1E293B',
+                        accent: '#3B82F6',
+                        success: '#10B981',
+                        warning: '#F59E0B',
+                        danger: '#EF4444',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        * { font-family: 'Inter', sans-serif; }
+        .loader { border: 3px solid #f3f3f3; border-top: 3px solid #3B82F6; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 8px; }
+        @keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+        .toast { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .nav-link { transition: all 0.2s ease; }
+        .nav-link:hover { background: #F1F5F9; }
+        .nav-link.active { background: #EFF6FF; color: #3B82F6; border-right: 3px solid #3B82F6; }
+        .modal-overlay { backdrop-filter: blur(4px); }
+        .tab-btn { transition: all 0.2s ease; }
+        .tab-btn.active { background: #3B82F6; color: white; }
+        .file-drop-zone { transition: all 0.2s ease; }
+        .file-drop-zone.dragover { border-color: #3B82F6; background: #EFF6FF; }
+        .sidebar-overlay { backdrop-filter: blur(4px); }
+        @media (max-width: 1023px) {
+            .sidebar { transform: translateX(-100%); transition: transform 0.3s ease; }
+            .sidebar.open { transform: translateX(0); }
+            .main-content { margin-left: 0 !important; }
+        }
+        
+        /* Modal specific styles */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 50;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1rem;
+        }
+        .modal-content {
+            background-color: white;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            position: relative;
+            transform: scale(0.95); /* Slight initial scale down for zoom-in effect */
+            opacity: 0;
+            animation: zoomIn 0.3s ease-out forwards;
+        }
+        @keyframes zoomIn {
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body class="bg-white min-h-screen">
+    <!-- Toast Container -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Approve Transaction Modal -->
+    <div id="approve-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="approve-modal-title">
+
+    <!-- Overlay (behind modal) -->
+    <div class="fixed inset-0 bg-black/50 z-40" onclick="closeApproveModal()"></div>
+
+    <!-- Modal content (above overlay) -->
+    <div class="relative z-50 p-4 w-full max-w-md">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" data-aos="zoom-in">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                        </svg>
+                    </div>
+                    <h3 id="approve-modal-title" class="text-xl font-bold text-primary mb-2">Approve Top-up</h3>
+                    <p class="text-slate-500">Top-up ID: <span id="approve-tx-id" class="font-mono"></span></p>                  
+                </div>
+                <!-- CHANGE: Added actual amount input field for admin to enter received amount -->
+                <div class="mb-6">
+                    <label for="approve-actual-amount" class="block text-sm font-medium text-slate-700 mb-2">Actual Amount Received (USD)</label>
+                    <input type="number" id="approve-actual-amount" step="0.01" min="0" required
+                        class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-success focus:border-transparent outline-none transition-all"
+                        placeholder="Enter the actual amount received">
+                    <p class="text-xs text-slate-400 mt-1">Enter the exact amount you received from the user</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeApproveModal()" class="flex-1 px-4 py-3 border border-slate-300 rounded-xl font-medium text-slate-700 hover:bg-slate-50 transition-all focus:ring-2 focus:ring-accent focus:outline-none">Cancel</button>
+                    <button id="confirm-approve-btn" onclick="confirmApprove()" class="flex-1 px-4 py-3 bg-success text-white rounded-xl font-medium hover:bg-green-600 transition-all flex items-center justify-center gap-2 focus:ring-2 focus:ring-success focus:outline-none">
+                        <span>Approve</span>
+                        <div id="approve-loader" class="loader hidden"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reject Confirmation Modal -->
+    <div id="reject-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center" role="dialog" aria-modal="true" aria-labelledby="reject-modal-title">
+
+    <!-- Overlay (behind modal) -->
+    <div class="fixed inset-0 bg-black/50 z-40" onclick="closeRejectModal()"></div>
+
+    <!-- Modal content (above overlay) -->
+    <div class="relative z-50 p-4 w-full max-w-md">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" data-aos="zoom-in">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-danger/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-danger" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </div>
+                    <h3 id="reject-modal-title" class="text-xl font-bold text-primary mb-2">Reject Top-up</h3>
+                    <p class="text-slate-500">Are you sure you want to reject this top-up request?</p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeRejectModal()" class="flex-1 px-4 py-3 border border-slate-300 rounded-xl font-medium text-slate-700 hover:bg-slate-50 transition-all focus:ring-2 focus:ring-accent focus:outline-none">Cancel</button>
+                    <button id="confirm-reject-btn" onclick="confirmReject()" class="flex-1 px-4 py-3 bg-danger text-white rounded-xl font-medium hover:bg-red-600 transition-all flex items-center justify-center gap-2 focus:ring-2 focus:ring-danger focus:outline-none">
+                        <span>Reject</span>
+                        <div id="reject-loader" class="loader hidden"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Broadcast Confirmation Modal -->
+    <div id="broadcast-modal" class="hidden fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby="broadcast-modal-title">
+        <div class="modal-overlay absolute inset-0 bg-black/50" onclick="closeBroadcastModal()"></div>
+        <div class="absolute inset-0 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6" data-aos="zoom-in">
+                <div class="text-center mb-6">
+                    <div class="w-16 h-16 bg-accent/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                        </svg>
+                    </div>
+                    <h3 id="broadcast-modal-title" class="text-xl font-bold text-primary mb-2">Confirm Broadcast</h3>
+                    <p class="text-slate-500">This message will be sent to all users. Are you sure?</p>
+                </div>
+                <div class="bg-slate-50 rounded-xl p-4 mb-6 max-h-40 overflow-y-auto">
+                    <p id="broadcast-preview" class="text-sm text-slate-700 whitespace-pre-wrap"></p>
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="closeBroadcastModal()" class="flex-1 px-4 py-3 border border-slate-300 rounded-xl font-medium text-slate-700 hover:bg-slate-50 transition-all focus:ring-2 focus:ring-accent focus:outline-none">Cancel</button>
+                    <button id="confirm-broadcast-btn" onclick="confirmBroadcast()" class="flex-1 px-4 py-3 bg-accent text-white rounded-xl font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2 focus:ring-2 focus:ring-accent focus:outline-none">
+                        <span>Send Broadcast</span>
+                        <div id="broadcast-loader" class="loader hidden"></div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Product Modal -->
+    <div id="product-modal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
+        <div class="modal-content w-full max-w-md mx-4">
+            <div class="flex items-center justify-between mb-6">
+                <h3 id="product-modal-title" class="text-xl font-bold text-primary">Add New Product</h3>
+                <button onclick="closeProductModal()" class="text-slate-400 hover:text-slate-600 transition-all focus:outline-none focus:ring-2 focus:ring-accent rounded-lg p-1" aria-label="Close modal">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+            </div>
+            <form id="add-product-form" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Product Type</label>
+                    <select id="product-key-select" required
+                        class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all">
+                        <option value="">Select UC Package...</option>
+                        <option value="product_60_uc" data-price="0.99">60 UC</option>
+                        <option value="product_325_uc" data-price="4.99">325 UC</option>
+                        <option value="product_660_uc" data-price="9.99">660 UC</option>
+                        <option value="product_1800_uc" data-price="24.99">1800 UC</option>
+                        <option value="product_3850_uc" data-price="49.99">3850 UC</option>
+                        <option value="product_8100_uc" data-price="99.99">8100 UC</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Price (USD)</label>
+                    <input type="number" id="product-price" step="0.01" min="0" required
+                        class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all"
+                        placeholder="Enter price">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-2">Codes File (.txt) - Optional</label>
+                    <div id="product-file-drop-zone" class="file-drop-zone border-2 border-dashed border-slate-300 rounded-xl p-4 text-center cursor-pointer hover:border-accent transition-all">
+                        <svg class="w-8 h-8 mx-auto mb-2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="text-sm text-slate-600">Drop .txt file or click to browse</p>
+                        <input type="file" id="product-file-input" accept=".txt" class="hidden">
+                    </div>
+                    <div id="product-file-preview" class="hidden mt-3 p-3 bg-slate-50 rounded-xl">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2 min-w-0">
+                                <svg class="w-5 h-5 text-accent flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                </svg>
+                                <span id="product-file-name" class="text-sm font-medium text-primary truncate"></span>
+                                <span id="product-file-count" class="text-xs text-slate-500 flex-shrink-0"></span>
+                            </div>
+                            <button type="button" onclick="clearProductFile()" class="text-slate-400 hover:text-danger transition-all flex-shrink-0">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex gap-3 pt-2">
+                    <button type="button" onclick="closeProductModal()" class="flex-1 px-4 py-3 border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-all focus:outline-none focus:ring-2 focus:ring-slate-300">
+                        Cancel
+                    </button>
+                    <button type="submit" id="save-product-btn" class="flex-1 px-4 py-3 bg-accent text-white rounded-xl font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-accent">
+                        <span>Save Product</span>
+                        <div id="save-product-loader" class="loader hidden"></div>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="min-h-screen flex">
+        <div id="sidebar-overlay" class="sidebar-overlay fixed inset-0 bg-black/50 z-30 hidden lg:hidden" onclick="toggleSidebar()"></div>
+        
+        <aside id="sidebar" class="sidebar w-64 bg-white border-r border-slate-200 fixed h-full z-40">
+            <div class="p-6 border-b border-slate-200">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 bg-accent/10 rounded-xl flex items-center justify-center">
+                            <svg class="w-5 h-5 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="font-bold text-primary">Dashboard</h2>
+                            <p id="admin-role" class="text-xs text-slate-500">Administrator</p>
+                        </div>
+                    </div>
+                    <button onclick="toggleSidebar()" class="lg:hidden p-2 rounded-lg hover:bg-slate-100 transition-all" aria-label="Close sidebar">
+                        <svg class="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <nav class="p-4 space-y-1">
+                <a href="index.html" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+                    </svg>
+                    Overview
+                </a>
+                <a href="users.html" class="nav-link flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                    Users
+                </a>
+                <a href="operations.html" class="nav-link active flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+                    </svg>
+                    Operations
+                </a>
+                <!-- Removed Admins nav link -->
+            </nav>
+            <div class="absolute bottom-0 left-0 right-0 p-4 border-t border-slate-200">
+                <button id="logout-btn" class="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-700 hover:bg-red-50 hover:text-danger transition-all font-medium">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                    </svg>
+                    Logout
+                </button>
+            </div>
+        </aside>
+
+        <main class="main-content flex-1 lg:ml-64 p-4 lg:p-8 bg-slate-50 min-h-screen">
+            <div class="lg:hidden flex items-center justify-between mb-6 bg-white rounded-xl p-4 border border-slate-200">
+                <button onclick="toggleSidebar()" class="p-2 rounded-lg hover:bg-slate-100 transition-all" aria-label="Open menu">
+                    <svg class="w-6 h-6 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+                    </svg>
+                </button>
+                <h2 class="font-bold text-primary">Operations</h2>
+                <div class="w-10"></div>
+            </div>
+
+            <!-- Header -->
+            <header class="mb-8" data-aos="fade-down">
+                <h1 class="text-2xl lg:text-3xl font-bold text-primary">Operations Center</h1>
+                <p class="text-slate-500 mt-1">Manage products, top-ups, and broadcasts</p>
+            </header>
+
+            <!-- Tabs -->
+            <div class="bg-white rounded-2xl border border-slate-200 p-2 mb-6 inline-flex flex-wrap gap-2" data-aos="fade-up">
+                <button onclick="switchTab('products')" class="tab-btn active px-4 lg:px-6 py-3 rounded-xl font-medium text-slate-700 text-sm lg:text-base" id="tab-products">
+                    Products
+                </button>
+                <button onclick="switchTab('transactions')" class="tab-btn px-4 lg:px-6 py-3 rounded-xl font-medium text-slate-700 text-sm lg:text-base" id="tab-transactions">
+                    Top-ups
+                </button>
+                <button onclick="switchTab('broadcast')" class="tab-btn px-4 lg:px-6 py-3 rounded-xl font-medium text-slate-700 text-sm lg:text-base" id="tab-broadcast">
+                    Broadcast
+                </button>
+            </div>
+
+            <!-- Products Tab -->
+            <div id="content-products" class="tab-content">
+                <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    <!-- Upload Codes -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 lg:p-6" data-aos="fade-up">
+                        <div class="flex items-center justify-between mb-4">
+                            <h2 class="text-lg font-semibold text-primary">Upload Product Codes</h2>
+                            <!-- ADDED: Add Product button to open modal -->
+                            <button onclick="openProductModal()" class="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium hover:bg-blue-600 transition-all flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Add Product
+                            </button>
+                        </div>
+                        <form id="upload-form" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Select Product</label>
+                                <select id="product-select" required
+                                    class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all">
+                                    <option value="">Choose a product...</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-700 mb-2">Upload Codes File (.txt)</label>
+                                <div id="file-drop-zone" class="file-drop-zone border-2 border-dashed border-slate-300 rounded-xl p-6 lg:p-8 text-center cursor-pointer hover:border-accent transition-all">
+                                    <svg class="w-10 lg:w-12 h-10 lg:h-12 mx-auto mb-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    </svg>
+                                    <p class="text-slate-600 mb-2 text-sm lg:text-base">Drag & drop your .txt file here</p>
+                                    <p class="text-xs lg:text-sm text-slate-400">or click to browse</p>
+                                    <input type="file" id="file-input" accept=".txt" class="hidden">
+                                </div>
+                                <div id="file-preview" class="hidden mt-4 p-4 bg-slate-50 rounded-xl">
+                                    <div class="flex items-center justify-between">
+                                        <div class="flex items-center gap-3">
+                                            <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                                            </svg>
+                                            <div class="min-w-0">
+                                                <p id="file-name" class="font-medium text-primary truncate"></p>
+                                                <p id="file-codes-count" class="text-sm text-slate-500"></p>
+                                            </div>
+                                        </div>
+                                        <button type="button" onclick="clearFile()" class="text-slate-400 hover:text-danger transition-all flex-shrink-0">
+                                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                                            </svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" id="upload-btn" class="w-full px-6 py-3 bg-accent text-white rounded-xl font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
+                                <span>Upload Codes</span>
+                                <div id="upload-loader" class="loader hidden"></div>
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Products List -->
+                    <div class="bg-white rounded-2xl border border-slate-200 p-4 lg:p-6" data-aos="fade-up" data-aos-delay="100">
+                        <h2 class="text-lg font-semibold text-primary mb-4">Products Inventory</h2>
+                        <div id="products-list" class="space-y-3">
+                            <div class="skeleton h-20 w-full rounded-xl"></div>
+                            <div class="skeleton h-20 w-full rounded-xl"></div>
+                            <div class="skeleton h-20 w-full rounded-xl"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Transactions Tab -->
+            <div id="content-transactions" class="tab-content hidden">
+                <div class="bg-white rounded-2xl border border-slate-200 overflow-hidden" data-aos="fade-up">
+                    <div class="p-4 lg:p-6 border-b border-slate-200">
+                        <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                            <h2 class="text-lg font-semibold text-primary">Pending Top-ups</h2>
+                            <button onclick="loadTopups()" class="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 transition-all flex items-center gap-2">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                                </svg>
+                                Refresh
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-slate-50">
+                                <tr>
+                                    <th class="px-4 lg:px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">ID</th>
+                                    <th class="px-4 lg:px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">User</th>
+                                    <th class="px-4 lg:px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden md:table-cell">Amount</th>
+                                    <th class="px-4 lg:px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ">Reference</th>
+                                    <th class="px-4 lg:px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider hidden sm:table-cell">Date</th>
+                                    <th class="px-4 lg:px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="topups-table-body" class="divide-y divide-slate-200">
+                                <tr class="skeleton-row">
+                                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-6 w-12"></div></td>
+                                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-6 w-24"></div></td>
+                                    <td class="px-4 lg:px-6 py-4 hidden md:table-cell"><div class="skeleton h-6 w-20"></div></td>
+                                    <td class="px-4 lg:px-6 py-4 "><div class="skeleton h-6 w-32"></div></td>
+                                    <td class="px-4 lg:px-6 py-4 hidden sm:table-cell"><div class="skeleton h-6 w-24"></div></td>
+                                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-8 w-24 ml-auto"></div></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Broadcast Tab -->
+            <div id="content-broadcast" class="tab-content hidden">
+                <div class="bg-white rounded-2xl border border-slate-200 p-4 lg:p-6 max-w-2xl" data-aos="fade-up">
+                    <h2 class="text-lg font-semibold text-primary mb-4">Send Broadcast Message</h2>
+                    <form id="broadcast-form" class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Target Audience</label>
+                            <select id="broadcast-target" class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all">
+                                <option value="all">All Users</option>
+                                <option value="active">Active Users Only</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 mb-2">Message</label>
+                            <textarea id="broadcast-message" rows="6" required
+                                class="w-full px-4 py-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-accent focus:border-transparent outline-none transition-all resize-none"
+                                placeholder="Enter your broadcast message..."></textarea>
+                            <p class="text-xs text-slate-400 mt-2">This message will be sent to all users via Telegram.</p>
+                        </div>
+                        <button type="submit" class="w-full px-6 py-3 bg-accent text-white rounded-xl font-medium hover:bg-blue-600 transition-all flex items-center justify-center gap-2">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path>
+                            </svg>
+                            Send Broadcast
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // ========================
+        // CONFIGURATION
+        // ========================
+        const API_BASE = '/api/v1/admin';
+        const TOKEN_KEY = 'admin_token';
+        const ADMIN_DATA_KEY = 'admin_data';
+        
+        // Global variables for file handling
+        let selectedFile = null; // For upload-codes tab
+        let selectedCodes = []; // For upload-codes tab
+
+        // Product modal specific
+        let productModalFile = null; // For add-product modal
+        let productModalCodes = []; // For add-product modal
+
+        // ========================
+        // UTILITY FUNCTIONS
+        // ========================
+        function getToken() {
+            return localStorage.getItem(TOKEN_KEY);
+        }
+
+        function clearAuth() {
+            localStorage.removeItem(TOKEN_KEY);
+            localStorage.removeItem(ADMIN_DATA_KEY);
+        }
+
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const overlay = document.getElementById('sidebar-overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('hidden');
+            document.body.classList.toggle('overflow-hidden');
+        }
+
+        function showToast(message, type = 'success') {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            const bgColor = type === 'success' ? 'bg-success' : type === 'error' ? 'bg-danger' : 'bg-warning';
+            toast.className = `toast ${bgColor} text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-3 min-w-[300px]`;
+            toast.innerHTML = `
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    ${type === 'success' 
+                        ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>'
+                        : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>'}
+                </svg>
+                <span class="font-medium">${message}</span>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.style.animation = 'slideIn 0.3s ease-out reverse';
+                setTimeout(() => toast.remove(), 300);
+            }, 4000);
+        }
+
+        async function apiRequest(endpoint, options = {}) {
+            const token = getToken();
+            const headers = { ...options.headers };
+            
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            if (!(options.body instanceof FormData)) {
+                headers['Content-Type'] = 'application/json';
+            }
+
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    ...options,
+                    headers
+                });
+
+                if (response.status === 401) {
+                    clearAuth();
+                    window.location.href = 'index.html';
+                    return null;
+                }
+
+                if (response.status === 403) {
+                    showToast('Permission denied', 'error');
+                    return null;
+                }
+
+                if (!response.ok) {
+                    let errorDetail = 'Request failed';
+                    try {
+                        const errorData = await response.json();
+                        errorDetail = errorData.detail || JSON.stringify(errorData);
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorDetail = response.statusText || 'Request failed';
+                    }
+                    throw new Error(errorDetail);
+                }
+
+                if (response.status === 204) return { success: true };
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                showToast(error.message || 'An error occurred', 'error');
+                throw error;
+            }
+        }
+
+        // ========================
+        // AUTH CHECK
+        // ========================
+        function checkAuth() {
+            const token = getToken();
+            if (!token) {
+                window.location.href = 'index.html';
+                return false;
+            }
+            return true;
+        }
+
+        // ========================
+        // TAB SWITCHING
+        // ========================
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.add('hidden'));
+            
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            document.getElementById(`content-${tab}`).classList.remove('hidden');
+            
+            if (tab === 'products') loadProducts();
+            if (tab === 'transactions') loadTopups();
+            
+            AOS.refresh();
+        }
+
+        // ========================
+        // PRODUCTS
+        // ========================
+        // Auto-fill price when product is selected in Add Product Modal
+        document.getElementById('product-key-select').addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const price = selectedOption.dataset.price;
+            if (price) {
+                document.getElementById('product-price').value = price;
+            } else {
+                document.getElementById('product-price').value = ''; // Clear if no price is associated
+            }
+        });
+
+        // Product modal file handling (for Add Product modal)
+        const productDropZone = document.getElementById('product-file-drop-zone');
+        const productFileInput = document.getElementById('product-file-input');
+
+        productDropZone.addEventListener('click', () => productFileInput.click());
+        
+        productDropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            productDropZone.classList.add('border-accent', 'bg-accent/5'); // Visual feedback for dragover
+        });
+
+        productDropZone.addEventListener('dragleave', () => {
+            productDropZone.classList.remove('border-accent', 'bg-accent/5');
+        });
+
+        productDropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            productDropZone.classList.remove('border-accent', 'bg-accent/5');
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.txt')) {
+                handleProductFile(file);
+            } else {
+                showToast('Please upload a .txt file', 'error');
+            }
+        });
+
+        productFileInput.addEventListener('change', (e) => {
+            if (e.target.files[0]) {
+                handleProductFile(e.target.files[0]);
+            }
+        });
+
+        function handleProductFile(file) {
+            productModalFile = file;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const content = e.target.result;
+                // Split by lines, trim whitespace, and filter out empty lines
+                productModalCodes = content.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+                
+                document.getElementById('product-file-name').textContent = file.name;
+                document.getElementById('product-file-count').textContent = `(${productModalCodes.length} codes)`;
+                document.getElementById('product-file-preview').classList.remove('hidden');
+                productDropZone.classList.add('hidden'); // Hide drop zone once file is selected
+            };
+            reader.readAsText(file);
+        }
+
+        function clearProductFile() {
+            productModalFile = null;
+            productModalCodes = [];
+            document.getElementById('product-file-input').value = ''; // Clear the input value
+            document.getElementById('product-file-preview').classList.add('hidden');
+            productDropZone.classList.remove('hidden'); // Show drop zone again
+        }
+
+        function openProductModal() {
+            const modal = document.getElementById('product-modal');
+            modal.classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+            
+            // Reset form and file preview
+            document.getElementById('add-product-form').reset();
+            clearProductFile();
+            
+            setupModalFocusTrap(modal);
+            AOS.refresh(); // Refresh AOS animations after modal is shown
+        }
+
+        function closeProductModal() {
+            const modal = document.getElementById('product-modal');
+            modal.classList.add('hidden');
+            document.body.style.overflow = ''; // Re-enable background scrolling
+            clearProductFile(); // Ensure file is cleared when modal is closed
+        }
+
+        document.getElementById('add-product-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const productKey = document.getElementById('product-key-select').value;
+            const price = document.getElementById('product-price').value;
+            
+            if (!productKey) {
+                showToast('Please select a product type', 'error');
+                return;
+            }
+            
+            if (!price || parseFloat(price) <= 0) {
+                showToast('Please enter a valid price', 'error');
+                return;
+            }
+
+            const loader = document.getElementById('save-product-loader');
+            const btn = document.getElementById('save-product-btn');
+            
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('name', productKey); // Use the selected value as the product name
+                formData.append('price_usd', parseFloat(price));
+                
+                if (productModalFile) {
+                    formData.append('file', productModalFile); // Append file if it exists
+                }
+
+                await apiRequest('/products', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const codesMsg = productModalCodes.length > 0 ? ` with ${productModalCodes.length} codes` : '';
+                showToast(`Product saved successfully${codesMsg}`, 'success');
+                closeProductModal(); // Close modal on success
+                loadProducts(); // Reload products list
+            } catch (error) {
+                // Error is handled by apiRequest, but we still want to close the modal on error
+                closeProductModal();
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        });
+
+
+        async function loadProducts() {
+            if (!checkAuth()) return;
+            
+            const list = document.getElementById('products-list');
+            // Show skeleton loaders while fetching
+            list.innerHTML = '<div class="skeleton h-20 w-full rounded-xl"></div><div class="skeleton h-20 w-full rounded-xl"></div>';
+
+            try {
+                const products = await apiRequest('/products');
+                if (!products) return; // API error handled internally
+
+                // Populate product select dropdown for the upload-codes form
+                const uploadSelect = document.getElementById('product-select');
+                uploadSelect.innerHTML = '<option value="">Choose a product...</option>' + 
+                    products.map(p => `<option value="${p.product_id}">${p.name}</option>`).join('');
+
+                if (products.length === 0) {
+                    // Display message if no products are found
+                    list.innerHTML = `
+                        <div class="text-center py-8 text-slate-500">
+                            <svg class="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                            </svg>
+                            <p>No products found</p>
+                            <p class="text-xs text-slate-400 mt-2">Click "Add Product" to create a new one.</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                // Render the list of products
+                list.innerHTML = products.map(p => `
+                    <div class="flex items-center justify-between p-4 bg-slate-50 rounded-xl hover:bg-slate-100 transition-all" data-product-id="${p.product_id}">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center flex-shrink-0">
+                                <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <p class="font-semibold text-primary">${p.name}</p>
+                                <p class="text-sm text-slate-500">Threshold: ${p.threshold || 0} codes</p> 
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-bold ${p.current_stock <= (p.threshold || 0) ? 'text-danger' : 'text-success'}">${p.current_stock}</p>
+                            <p class="text-xs text-slate-500">available</p>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                list.innerHTML = '<p class="text-center text-slate-500 py-8">Failed to load products</p>';
+            }
+        }
+
+        // ========================
+        // FILE UPLOAD (for Upload Codes Tab)
+        // ========================
+        const dropZone = document.getElementById('file-drop-zone');
+        const fileInput = document.getElementById('file-input');
+
+        dropZone.addEventListener('click', () => fileInput.click());
+        
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover'); // Add class for visual feedback
+        });
+        
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+        
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            const file = e.dataTransfer.files[0];
+            if (file) handleFile(file);
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) handleFile(file);
+        });
+
+        async function handleFile(file) {
+            if (!file.name.endsWith('.txt')) {
+                showToast('Please upload a .txt file', 'error');
+                return;
+            }
+
+            selectedFile = file;
+            const text = await file.text(); // Read file content as text
+            // Split by lines, trim whitespace, and filter out empty lines
+            selectedCodes = text.split('\n').map(c => c.trim()).filter(c => c.length > 0);
+
+            document.getElementById('file-preview').classList.remove('hidden');
+            document.getElementById('file-name').textContent = file.name;
+            document.getElementById('file-codes-count').textContent = `${selectedCodes.length} codes detected`;
+            dropZone.classList.add('hidden'); // Hide drop zone once file is selected
+        }
+
+        function clearFile() {
+            selectedFile = null;
+            selectedCodes = [];
+            fileInput.value = ''; // Clear the input value
+            document.getElementById('file-preview').classList.add('hidden');
+            dropZone.classList.remove('hidden'); // Show drop zone again
+        }
+
+        document.getElementById('upload-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const productId = document.getElementById('product-select').value;
+            if (!productId) {
+                showToast('Please select a product', 'error');
+                return;
+            }
+            
+            if (selectedCodes.length === 0) {
+                showToast('Please upload a file with codes', 'error');
+                return;
+            }
+
+            const loader = document.getElementById('upload-loader');
+            const btn = document.getElementById('upload-btn');
+            
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                const formData = new FormData();
+                formData.append('file', selectedFile); // Append the file object
+
+                await apiRequest(`/products/${productId}/upload-codes`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                showToast(`${selectedCodes.length} codes uploaded successfully`, 'success');
+                clearFile(); // Clear file selection after successful upload
+                loadProducts(); // Refresh products list to show updated stock (if applicable)
+            } catch (error) {
+                // Error is handled by apiRequest
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        });
+
+        // ========================
+        // TOP-UPS (TRANSACTIONS)
+        // ========================
+        async function loadTopups() {
+            if (!checkAuth()) return;
+            
+            const tableBody = document.getElementById('topups-table-body');
+            // Show skeleton loaders while fetching
+            tableBody.innerHTML = `
+                <tr class="skeleton-row">
+                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-6 w-12"></div></td>
+                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-6 w-24"></div></td>
+                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-6 w-20"></div></td>
+                    <td class="px-4 lg:px-6 py-4 hidden md:table-cell"><div class="skeleton h-6 w-32"></div></td>
+                    <td class="px-4 lg:px-6 py-4 hidden sm:table-cell"><div class="skeleton h-6 w-24"></div></td>
+                    <td class="px-4 lg:px-6 py-4"><div class="skeleton h-8 w-24 ml-auto"></div></td>
+                </tr>
+            `;
+
+            try {
+                const data = await apiRequest('/topups/pending');
+                if (!data) return; // API error handled internally
+
+                if (data.length === 0) {
+                    // Display message if no pending top-ups
+                    tableBody.innerHTML = `
+                        <tr>
+                            <td colspan="6" class="px-6 py-12 text-center text-slate-500">
+                                <svg class="w-12 h-12 mx-auto mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                                <p>No pending top-ups</p>
+                            </td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                // Render the table rows for pending top-ups
+                tableBody.innerHTML = data.map(tx => `
+                    <tr class="hover:bg-slate-50 transition-colors">
+                        <td class="px-4 lg:px-6 py-4">
+                            <span class="font-mono text-sm text-slate-600">#${tx.id}</span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-4">
+                            <div>
+                                <p class="font-medium text-primary">${tx.user?.username || 'Unknown'}</p>
+                                <p class="text-xs text-slate-500">ID: ${tx.user_id}</p>
+                            </div>
+                        </td>
+                        <td class="px-4 lg:px-6 py-4 hidden md:table-cell">
+                            <span class="font-semibold text-primary">$${tx.amount_usd.toFixed(2)}</span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-4 ">
+                            <span class="text-sm text-slate-600 truncate block max-w-[150px]">${tx.txid_or_note || '-'}</span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-4 hidden sm:table-cell">
+                            <span class="text-sm text-slate-500">${new Date(tx.created_at).toLocaleDateString()}</span>
+                        </td>
+                        <td class="px-4 lg:px-6 py-4 text-right">
+                            <div class="flex gap-2 justify-end">
+                                <button onclick="openApproveModal(${tx.id}, ${tx.amount_usd})" class="px-3 py-2 bg-success/10 text-success rounded-lg font-medium text-sm hover:bg-success/20 transition-all">
+                                    Approve
+                                </button>
+                                <button onclick="openRejectModal(${tx.id})" class="px-3 py-2 bg-danger/10 text-danger rounded-lg font-medium text-sm hover:bg-danger/20 transition-all">
+                                    Reject
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                tableBody.innerHTML = '<tr><td colspan="6" class="px-6 py-12 text-center text-slate-500">Failed to load top-ups</td></tr>';
+            }
+        }
+
+        // ========================
+        // APPROVE MODAL
+        // ========================
+        let approveTargetId = null; // Holds the ID of the top-up being approved
+        let approveTargetAmount = 0; // Holds the requested amount for display
+
+        function openApproveModal(topupId, requestedAmount) {
+            approveTargetId = topupId;
+            approveTargetAmount = requestedAmount; // Store the requested amount for display
+            document.getElementById('approve-tx-id').textContent = topupId;
+            document.getElementById('approve-tx-amount').textContent = `$${requestedAmount.toFixed(2)}`; // Display requested amount
+            // Pre-fill the actual amount input with the requested amount
+            document.getElementById('approve-actual-amount').value = requestedAmount.toFixed(2);
+            document.getElementById('approve-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling when modal is open
+            AOS.refresh();
+            setupModalFocusTrap(document.getElementById('approve-modal')); // Use generic focus trap function
+        }
+
+        function closeApproveModal() {
+            const modal = document.getElementById('approve-modal');
+            if (modal) {
+                modal.classList.add('hidden');
+            }
+            document.body.style.overflow = ''; // Re-enable background scrolling
+            document.getElementById('approve-actual-amount').value = ''; // Clear input
+            approveTargetId = null;
+            approveTargetAmount = 0;
+        }
+
+        async function confirmApprove() {
+            if (!approveTargetId) return;
+            
+            // Get and validate actual amount received
+            const actualAmountInput = document.getElementById('approve-actual-amount');
+            const actualAmount = parseFloat(actualAmountInput.value);
+            
+            if (!actualAmount || isNaN(actualAmount) || actualAmount <= 0) {
+                showToast('Please enter a valid amount received', 'error');
+                actualAmountInput.focus();
+                return;
+            }
+            
+            const loader = document.getElementById('approve-loader');
+            const btn = document.getElementById('confirm-approve-btn');
+            
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                await apiRequest(`/topups/${approveTargetId}/approve`, {
+                    method: 'POST',
+                    body: JSON.stringify({ actual_amount: actualAmount }) // API expects 'actual_amount'
+                });
+
+                showToast('Top-up approved successfully', 'success');
+                closeApproveModal(); // Close modal on success
+                loadTopups(); // Refresh the table
+            } catch (error) {
+                closeApproveModal();
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        }
+
+        // ========================
+        // REJECT MODAL
+        // ========================
+        let rejectTargetId = null; // Holds the ID of the top-up being rejected
+
+        function openRejectModal(topupId) {
+            rejectTargetId = topupId;
+            document.getElementById('reject-modal').classList.remove('hidden');
+            AOS.refresh();
+            setupModalFocusTrap(document.getElementById('reject-modal')); // Use generic focus trap function
+        }
+
+        function closeRejectModal() {
+            document.getElementById('reject-modal').classList.add('hidden');
+            document.body.style.overflow = ''; // Re-enable background scrolling
+            rejectTargetId = null;
+        }
+
+        async function confirmReject() {
+            if (!rejectTargetId) return;
+            
+            const loader = document.getElementById('reject-loader');
+            const btn = document.getElementById('confirm-reject-btn');
+            
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                await apiRequest(`/topups/${rejectTargetId}/reject`, { method: 'POST' });
+                
+                showToast('Top-up rejected', 'success');
+                closeRejectModal();
+                loadTopups(); // Refresh the table
+            } catch (error) {
+                // Error is handled by apiRequest, but still close modal
+                closeRejectModal();
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        }
+
+        // ========================
+        // BROADCAST
+        // ========================
+        document.getElementById('broadcast-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            const message = document.getElementById('broadcast-message').value.trim();
+            if (!message) {
+                showToast('Please enter a message', 'error');
+                return;
+            }
+
+            // Populate broadcast preview and open modal
+            document.getElementById('broadcast-preview').textContent = message;
+            document.getElementById('broadcast-modal').classList.remove('hidden');
+            document.body.style.overflow = 'hidden'; // Prevent background scrolling
+            AOS.refresh();
+            setupModalFocusTrap(document.getElementById('broadcast-modal')); // Use generic focus trap function
+        });
+
+        function closeBroadcastModal() {
+            document.getElementById('broadcast-modal').classList.add('hidden');
+            document.body.style.overflow = ''; // Re-enable background scrolling
+        }
+
+        async function confirmBroadcast() {
+            const broadcastMessage = document.getElementById('broadcast-message').value.trim();
+            const broadcastTarget = document.getElementById('broadcast-target').value;
+            
+            const loader = document.getElementById('broadcast-loader');
+            const btn = document.getElementById('confirm-broadcast-btn');
+            
+            loader.classList.remove('hidden');
+            btn.disabled = true;
+
+            try {
+                await apiRequest('/broadcast', {
+                    method: 'POST',
+                    body: JSON.stringify({ 
+                        message: broadcastMessage,
+                        target: broadcastTarget
+                    })
+                });
+
+                showToast('Broadcast sent successfully', 'success');
+                closeBroadcastModal();
+                document.getElementById('broadcast-message').value = ''; // Clear message input
+            } catch (error) {
+                // Error is handled by apiRequest, but still close modal
+                closeBroadcastModal();
+            } finally {
+                loader.classList.add('hidden');
+                btn.disabled = false;
+            }
+        }
+
+        // ========================
+        // FOCUS TRAP FOR ACCESSIBILITY
+        // ========================
+        // This function sets up a focus trap within a modal to improve accessibility.
+        // It ensures that keyboard navigation stays within the modal when it's open.
+        // It also handles closing the modal with the Escape key.
+        function setupModalFocusTrap(modal) {
+            const focusableElements = modal.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+            if (focusableElements.length === 0) return;
+
+            const firstFocusableElement = focusableElements[0];
+            const lastFocusableElement = focusableElements[focusableElements.length - 1];
+
+            // Set focus to the first focusable element
+            firstFocusableElement.focus();
+
+            const trapFocusHandler = (e) => {
+                if (e.key === 'Tab') {
+                    if (e.shiftKey) {
+                        // Shift + Tab
+                        if (document.activeElement === firstFocusableElement) {
+                            lastFocusableElement.focus();
+                            e.preventDefault();
+                        }
+                    } else {
+                        // Tab
+                        if (document.activeElement === lastFocusableElement) {
+                            firstFocusableElement.focus();
+                            e.preventDefault();
+                        }
+                    }
+                }
+                // Close modal on Escape key press
+                if (e.key === 'Escape') {
+                    if (modal.id === 'approve-modal') closeApproveModal();
+                    else if (modal.id === 'reject-modal') closeRejectModal();
+                    else if (modal.id === 'broadcast-modal') closeBroadcastModal();
+                    else if (modal.id === 'product-modal') closeProductModal();
+                }
+            };
+            
+            // Add listener when modal is made visible
+            modal.addEventListener('keydown', trapFocusHandler);
+
+            // Clean up the event listener when the modal is closed to prevent memory leaks
+            const observer = new MutationObserver((mutationsList, obs) => {
+                for(const mutation of mutationsList) {
+                    if (modal.classList.contains('hidden')) {
+                        // Modal is hidden, remove listener
+                        modal.removeEventListener('keydown', trapFocusHandler);
+                        obs.disconnect(); // Stop observing once listener is removed
+                        break;
+                    }
+                }
+            });
+            // Observe attribute changes to detect when the 'hidden' class is added
+            observer.observe(modal, { attributes: true, attributeFilter: ['class'] });
+            
+            // The MutationObserver above handles cleanup properly without needing to wrap close functions
+        }
+
+        // ========================
+        // LOGOUT
+        // ========================
+        document.getElementById('logout-btn').addEventListener('click', () => {
+            clearAuth(); // Remove token and admin data from local storage
+            window.location.href = 'index.html'; // Redirect to login page
+        });
+
+        // ========================
+        // INIT
+        // ========================
+        document.addEventListener('DOMContentLoaded', () => {
+            AOS.init({ duration: 600, once: true }); // Initialize AOS for animations
+            
+            // Check authentication status on page load
+            if (checkAuth()) {
+                // Check URL hash to determine which tab to show initially
+                const hash = window.location.hash.replace('#', ''); // Remove '#' from hash
+                if (hash && ['products', 'transactions', 'broadcast'].includes(hash)) {
+                    switchTab(hash); // Switch to the specified tab
+                } else {
+                    loadProducts(); // Default to loading products tab
+                }
+            }
+        });
+    </script>
+</body>
+</html>
